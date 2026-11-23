@@ -5,6 +5,7 @@
 !/patches/
 !/src/
 !/tools/
+!/tests/
 !/.gitattributes
 !/.gitignore
 !/CMakeLists.txt

@@ -163,6 +163,12 @@ The opening logos can be skipped, and so can any video or cutscene, by pressing 
   </tr>
 </table>
 
+### Surround audio
+
+The game automatically detects stereo, 5.1 and 7.1 from the opened SDL playback device. No manual audio setting is required. Unknown or unsupported channel counts fall back to stereo, and stereo devices retain the existing downmix. The layout is detected when an audio port opens; restart the game after changing the host speaker configuration.
+
+The Windows build has been tested in gameplay with a surround receiver, with center-channel dialogue and distinct front/rear positional audio reported by the tester. 7.1 hardware output has not been independently verified. The standalone channel-selection test covers 2, 6 and 8 channels and unsupported/unknown counts; it does not test physical speaker routing. Run it from the repository root with `c++ -std=c++17 -Isrc tests/test_auto_surround.cpp -o test_auto_surround`, then run the resulting executable.
+
 ## Settings
 
 Defaults are in bold.

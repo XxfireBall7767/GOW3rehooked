@@ -13,6 +13,7 @@
 #include "orbis/core/emulator_settings.h"
 #include "orbis/internals/audio/audioout.h"
 #include "orbis/internals/audio/audioout_backend.h"
+#include "orbis/internals/audio/host_surround.h"
 #include "gpu/gpu_thread.h"
 #include "orbis/internals/kernel/threads.h"
 
@@ -136,6 +137,10 @@ public:
         } else {
             LOG_ERROR(Lib_AudioOut, "Failed to set audio stream gain: {}", SDL_GetError());
         }
+    }
+
+    [[nodiscard]] std::uint8_t GetOutputChannels() const override {
+        return host_output_channels;
     }
 
     u64 GetLastOutputTime() const {
@@ -285,9 +290,32 @@ private:
             return false;
         }
 
+        // Use the *opened* endpoint, not the input stream's (usually 8ch)
+        // format: the host may be configured for stereo, 5.1 or 7.1.
         SDL_AudioSpec dev_spec{};
-        if (num_channels >= 6 &&
-            SDL_GetAudioDeviceFormat(SDL_GetAudioStreamDevice(stream), &dev_spec, nullptr) &&
+        const bool have_device_format = SDL_GetAudioDeviceFormat(
+            SDL_GetAudioStreamDevice(stream), &dev_spec, nullptr);
+        host_output_channels =
+            SelectGuestSpeakerChannels(have_device_format ? dev_spec.channels : 0);
+        if (have_device_format) {
+            LOG_INFO(Lib_AudioOut,
+                     "SDL playback device: {} channel(s); reporting {} to PS4 game",
+                     dev_spec.channels, host_output_channels);
+            if (dev_spec.channels != host_output_channels) {
+                LOG_WARNING(Lib_AudioOut,
+                            "Unsupported host speaker layout ({}ch); reporting stereo to game",
+                            dev_spec.channels);
+            }
+        } else {
+            LOG_WARNING(Lib_AudioOut,
+                        "Could not determine host speaker layout: {}; reporting stereo",
+                        SDL_GetError());
+        }
+
+        // Keep the existing PS4-style downmix for real mono/stereo devices.
+        // A 5.1 device takes 8 guest channels and SDL folds 7.1 -> 5.1;
+        // 7.1 devices retain all 8 channels.
+        if (num_channels >= 6 && have_device_format &&
             dev_spec.channels >= 1 && dev_spec.channels <= 2) {
             ps4_downmix = true;
             internal_buffer_size = buffer_frames * sizeof(float) * 2;
@@ -638,6 +666,8 @@ private:
     const u32 num_channels;
     const bool is_float;
     const bool is_std;
+    // PS4-facing speaker count from the opened host device at port creation.
+    std::uint8_t host_output_channels{2};
     // Set when the output device is stereo and we fold 5.1/7.1 ourselves.
     bool ps4_downmix{false};
     const std::array<int, 8> channel_layout;
